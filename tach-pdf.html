@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Tách PDF — Chia file PDF thành nhiều file nhỏ</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222c; --border:#2a2f3a;
+    --text:#e8eaee; --muted:#9aa3b2; --accent:#c93a2e; --ok:#22c55e; --blue:#2563eb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh}
+  .wrap{max-width:760px;margin:0 auto;padding:18px 14px 40px}
+  h1{font-size:21px;margin:6px 0 2px}
+  .sub{color:var(--muted);font-size:13.5px;line-height:1.6;margin-bottom:16px}
+  #drop{border:2px dashed var(--border);border-radius:16px;padding:34px 16px;text-align:center;background:var(--panel);cursor:pointer;transition:.15s}
+  #drop.over{border-color:var(--accent);background:var(--panel2)}
+  #drop .big{font-size:38px}
+  #drop .t{font-size:16px;font-weight:700;margin-top:8px}
+  #drop .s{color:var(--muted);font-size:13px;margin-top:4px;line-height:1.6}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;margin-top:14px}
+  .card h3{margin:0 0 10px;font-size:15px}
+  .info{display:flex;gap:10px;flex-wrap:wrap;font-size:13.5px;line-height:1.7}
+  .info b{color:#fff}
+  .modes{display:flex;flex-direction:column;gap:10px}
+  .mode{display:flex;gap:10px;align-items:flex-start;background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:11px 12px;cursor:pointer}
+  .mode.sel{border-color:var(--accent)}
+  .mode input[type=radio]{margin-top:3px;accent-color:var(--accent)}
+  .mode .mt{font-weight:700;font-size:14.5px}
+  .mode .md{color:var(--muted);font-size:12.5px;line-height:1.55;margin-top:2px}
+  .mode .fld{margin-top:8px;display:none}
+  .mode.sel .fld{display:block}
+  input[type=number],input[type=text]{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:8px 10px;font-size:14px;width:110px;outline:none}
+  input[type=text]{width:100%;max-width:340px}
+  button{cursor:pointer;border:1px solid var(--border);background:var(--panel2);color:var(--text);border-radius:11px;padding:10px 16px;font-size:14px}
+  button:active{transform:scale(.97)}
+  #splitBtn{background:var(--accent);border-color:transparent;color:#fff;font-weight:700;width:100%;padding:13px;font-size:15.5px;margin-top:14px}
+  #splitBtn:disabled{opacity:.45}
+  #zipBtn{background:var(--blue);border-color:transparent;color:#fff;font-weight:700}
+  .out{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--border);border-radius:11px;padding:10px 12px;margin-top:8px;font-size:13.5px}
+  .out .nm{flex:1;word-break:break-all;line-height:1.5}
+  .out .nm small{color:var(--muted);display:block}
+  .out a{background:var(--ok);color:#06280f;font-weight:700;text-decoration:none;padding:8px 13px;border-radius:9px;font-size:13px;white-space:nowrap}
+  .status{font-size:13.5px;color:var(--muted);margin-top:10px;line-height:1.6;min-height:20px}
+  .status.err{color:#f87171}
+  .note{color:var(--muted);font-size:12.5px;line-height:1.7;margin-top:14px}
+  progress{width:100%;height:8px;margin-top:10px;display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>✂️ Tách PDF</h1>
+  <div class="sub">Chia một file PDF nặng thành nhiều file nhỏ — ngay trên trình duyệt, file của bạn <b>không tải lên máy chủ nào cả</b>.</div>
+
+  <div id="drop">
+    <div class="big">📄</div>
+    <div class="t">Thả file PDF vào đây hoặc chạm để chọn file</div>
+    <div class="s">Hỗ trợ file PDF nhiều trang. File càng lớn xử lý càng lâu — file rất nặng (trên ~100 MB) nên làm trên máy tính.</div>
+    <input type="file" id="fileInp" accept="application/pdf,.pdf" hidden>
+  </div>
+
+  <div class="card" id="infoCard" style="display:none">
+    <h3>📋 Thông tin file</h3>
+    <div class="info">
+      <div>Tên: <b id="fName">—</b></div>
+      <div>Dung lượng: <b id="fSize">—</b></div>
+      <div>Số trang: <b id="fPages">—</b></div>
+    </div>
+  </div>
+
+  <div class="card" id="optCard" style="display:none">
+    <h3>⚙️ Cách tách</h3>
+    <div class="modes">
+      <label class="mode sel" data-mode="chunk">
+        <input type="radio" name="mode" checked>
+        <div style="flex:1">
+          <div class="mt">Mỗi file gồm N trang</div>
+          <div class="md">Ví dụ: file 100 trang, mỗi file 10 trang → ra 10 file nhỏ.</div>
+          <div class="fld">Mỗi file: <input type="number" id="chunkN" value="10" min="1"> trang</div>
+        </div>
+      </label>
+
+      <label class="mode" data-mode="size">
+        <input type="radio" name="mode">
+        <div style="flex:1">
+          <div class="mt">Theo dung lượng tối đa mỗi file</div>
+          <div class="md">App tự gộp trang cho tới khi gần chạm mức dung lượng bạn đặt (ước lượng theo từng trang, sai số nhỏ).</div>
+          <div class="fld">Tối đa mỗi file: <input type="number" id="sizeMB" value="10" min="1" step="0.5"> MB</div>
+        </div>
+      </label>
+
+      <label class="mode" data-mode="range">
+        <input type="radio" name="mode">
+        <div style="flex:1">
+          <div class="mt">Theo khoảng trang tự chọn</div>
+          <div class="md">Mỗi khoảng là một file. Viết dạng: 1-10, 11-25, 26 (dấu phẩy ngăn cách).</div>
+          <div class="fld"><input type="text" id="ranges" placeholder="Ví dụ: 1-10, 11-20, 21-30"></div>
+        </div>
+      </label>
+
+      <label class="mode" data-mode="each">
+        <input type="radio" name="mode">
+        <div style="flex:1">
+          <div class="mt">Mỗi trang một file</div>
+          <div class="md">Tách toàn bộ thành từng trang riêng lẻ.</div>
+        </div>
+      </label>
+    </div>
+
+    <button id="splitBtn">✂️ Bắt đầu tách</button>
+    <progress id="prog" max="100" value="0"></progress>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card" id="outCard" style="display:none">
+    <h3>📦 File đã tách (<span id="outCount">0</span>)</h3>
+    <button id="zipBtn">⬇️ Tải tất cả (ZIP)</button>
+    <div id="outList"></div>
+  </div>
+
+  <div class="note">🔒 Toàn bộ việc tách diễn ra trên máy của bạn bằng thư viện pdf-lib chạy trong trình duyệt — file PDF không rời khỏi thiết bị. Tên file xuất ra dạng: ten-goc_phan-1.pdf, ten-goc_trang-5.pdf…</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+var $ = function(id){ return document.getElementById(id); };
+var srcBytes = null, srcName = 'file', srcDoc = null, outputs = [];
+
+function fmtSize(b){
+  if(b >= 1024*1024) return (b/1024/1024).toFixed(2) + ' MB';
+  if(b >= 1024) return (b/1024).toFixed(1) + ' KB';
+  return b + ' B';
+}
+function setStatus(t, err){
+  var s = $('status');
+  s.textContent = t || '';
+  s.className = 'status' + (err ? ' err' : '');
+}
+function baseName(name){ return name.replace(/\.pdf$/i, '').replace(/[^\p{L}\p{N}_-]+/gu, '_'); }
+
+var drop = $('drop'), fileInp = $('fileInp');
+drop.onclick = function(){ fileInp.click(); };
+drop.ondragover = function(e){ e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = function(){ drop.classList.remove('over'); };
+drop.ondrop = function(e){ e.preventDefault(); drop.classList.remove('over'); if(e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]); };
+fileInp.onchange = function(){ if(fileInp.files.length) loadFile(fileInp.files[0]); };
+
+async function loadFile(f){
+  if(!/pdf$/i.test(f.name) && f.type !== 'application/pdf'){ setStatus(''); alert('Vui lòng chọn file PDF.'); return; }
+  srcName = baseName(f.name);
+  srcBytes = new Uint8Array(await f.arrayBuffer());
+  try{
+    srcDoc = await PDFLib.PDFDocument.load(srcBytes, { ignoreEncryption: true });
+  }catch(e){
+    alert('Không đọc được file PDF này (có thể bị mã hoá hoặc hỏng).');
+    srcDoc = null; return;
+  }
+  $('fName').textContent = f.name;
+  $('fSize').textContent = fmtSize(f.size);
+  $('fPages').textContent = srcDoc.getPageCount();
+  $('infoCard').style.display = 'block';
+  $('optCard').style.display = 'block';
+  $('outCard').style.display = 'none';
+  outputs = [];
+  setStatus('Đã nạp file. Chọn cách tách rồi bấm "Bắt đầu tách".');
+}
+
+document.querySelectorAll('.mode').forEach(function(m){
+  m.addEventListener('click', function(){
+    document.querySelectorAll('.mode').forEach(function(x){ x.classList.remove('sel'); });
+    m.classList.add('sel');
+    m.querySelector('input[type=radio]').checked = true;
+  });
+});
+
+async function makePdf(pageIdxs){
+  var out = await PDFLib.PDFDocument.create();
+  var pages = await out.copyPages(srcDoc, pageIdxs);
+  pages.forEach(function(p){ out.addPage(p); });
+  return await out.save();
+}
+function range(a, b){ var r = []; for(var i = a; i <= b; i++) r.push(i); return r; }
+
+$('splitBtn').onclick = async function(){
+  if(!srcDoc) return;
+  var mode = document.querySelector('.mode.sel').getAttribute('data-mode');
+  var total = srcDoc.getPageCount();
+  var groups = [];   // mỗi phần tử: mảng số trang (0-based)
+  var names = [];
+
+  if(mode === 'chunk'){
+    var n = Math.max(1, parseInt($('chunkN').value || '10', 10));
+    for(var s = 0; s < total; s += n){ groups.push(range(s, Math.min(s + n, total) - 1)); }
+    groups.forEach(function(g, i){ names.push(srcName + '_phan-' + (i + 1) + '_trang-' + (g[0] + 1) + '-' + (g[g.length - 1] + 1) + '.pdf'); });
+  }
+  else if(mode === 'each'){
+    for(var i = 0; i < total; i++){ groups.push([i]); names.push(srcName + '_trang-' + (i + 1) + '.pdf'); }
+  }
+  else if(mode === 'range'){
+    var txt = $('ranges').value.trim();
+    if(!txt){ setStatus('Hãy nhập khoảng trang, ví dụ: 1-10, 11-20', true); return; }
+    var parts = txt.split(',');
+    for(var k = 0; k < parts.length; k++){
+      var p = parts[k].trim(); if(!p) continue;
+      var m = p.match(/^(\d+)\s*-\s*(\d+)$/), single = p.match(/^(\d+)$/);
+      if(m){
+        var a = parseInt(m[1], 10), b = parseInt(m[2], 10);
+        if(a < 1 || b > total || a > b){ setStatus('Khoảng "' + p + '" không hợp lệ (file có ' + total + ' trang).', true); return; }
+        groups.push(range(a - 1, b - 1)); names.push(srcName + '_trang-' + a + '-' + b + '.pdf');
+      } else if(single){
+        var c = parseInt(single[1], 10);
+        if(c < 1 || c > total){ setStatus('Trang "' + p + '" vượt quá số trang của file.', true); return; }
+        groups.push([c - 1]); names.push(srcName + '_trang-' + c + '.pdf');
+      } else { setStatus('Không hiểu đoạn "' + p + '". Dùng dạng 1-10 hoặc 15.', true); return; }
+    }
+    if(!groups.length){ setStatus('Chưa có khoảng trang hợp lệ.', true); return; }
+  }
+  else if(mode === 'size'){
+    var target = Math.max(1, parseFloat($('sizeMB').value || '10')) * 1024 * 1024;
+    setStatus('Đang đo dung lượng từng trang để gộp nhóm…');
+    // Đo kích thước từng trang riêng lẻ (gần đúng) rồi gộp tham lam theo thứ tự
+    var sizes = [];
+    for(var j = 0; j < total; j++){ var one = await makePdf([j]); sizes.push(one.length); }
+    var cur = [], curSize = 0;
+    for(var q = 0; q < total; q++){
+      if(cur.length && curSize + sizes[q] > target){ groups.push(cur); cur = []; curSize = 0; }
+      cur.push(q); curSize += sizes[q];
+    }
+    if(cur.length) groups.push(cur);
+    groups.forEach(function(g, i){ names.push(srcName + '_phan-' + (i + 1) + '_trang-' + (g[0] + 1) + '-' + (g[g.length - 1] + 1) + '.pdf'); });
+  }
+
+  $('splitBtn').disabled = true;
+  var prog = $('prog'); prog.style.display = 'block'; prog.value = 0;
+  outputs = [];
+  $('outList').innerHTML = ''; $('outCard').style.display = 'none';
+  try{
+    for(var gi = 0; gi < groups.length; gi++){
+      setStatus('Đang tạo file ' + (gi + 1) + '/' + groups.length + '…');
+      var bytes = await makePdf(groups[gi]);
+      outputs.push({ name: names[gi], bytes: bytes });
+      prog.value = Math.round((gi + 1) / groups.length * 100);
+      await new Promise(function(r){ setTimeout(r, 10); });
+    }
+  }catch(e){
+    setStatus('Có lỗi khi tách: ' + e.message, true);
+    $('splitBtn').disabled = false; prog.style.display = 'none';
+    return;
+  }
+  prog.style.display = 'none';
+  $('splitBtn').disabled = false;
+  setStatus('✅ Tách xong ' + outputs.length + ' file. Bấm Tải ở từng file hoặc tải tất cả dạng ZIP.');
+  renderOutputs();
+};
+
+function renderOutputs(){
+  $('outCount').textContent = outputs.length;
+  var list = $('outList'); list.innerHTML = '';
+  outputs.forEach(function(o){
+    var url = URL.createObjectURL(new Blob([o.bytes], { type: 'application/pdf' }));
+    var div = document.createElement('div'); div.className = 'out';
+    div.innerHTML = '<div class="nm">' + o.name + '<small>' + fmtSize(o.bytes.length) + '</small></div>';
+    var a = document.createElement('a');
+    a.href = url; a.download = o.name; a.textContent = '⬇️ Tải';
+    div.appendChild(a);
+    list.appendChild(div);
+  });
+  $('outCard').style.display = 'block';
+}
+
+$('zipBtn').onclick = async function(){
+  if(!outputs.length || typeof JSZip === 'undefined') return;
+  setStatus('Đang nén ZIP…');
+  var zip = new JSZip();
+  outputs.forEach(function(o){ zip.file(o.name, o.bytes); });
+  var blob = await zip.generateAsync({ type: 'blob' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = srcName + '_da-tach.zip';
+  a.click();
+  setStatus('Đã tải file ZIP gồm ' + outputs.length + ' file PDF.');
+};
+</script>
+</body>
+</html>
